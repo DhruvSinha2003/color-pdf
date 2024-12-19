@@ -143,9 +143,9 @@ const PDFColorTransform = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-8">
+    <div className="min-h-screen bg-gray-900 text-white p-8">
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-md p-6">
+        <div className="bg-gray-800 rounded-lg shadow-md p-6">
           <h1 className="text-2xl font-semibold text-center mb-6">
             PDF Color Transform
           </h1>
@@ -157,13 +157,15 @@ const PDFColorTransform = () => {
             onDragOver={handleDrag}
             onDrop={handleDrop}
             className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors
-              ${dragActive ? "border-blue-500 bg-blue-50" : "border-gray-300"}
-              ${file ? "border-green-500 bg-green-50" : ""}`}
+                ${
+                  dragActive ? "border-blue-500 bg-blue-900" : "border-gray-600"
+                }
+                ${file ? "border-green-500 bg-green-900" : ""}`}
           >
             {!file ? (
               <>
                 <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p className="text-gray-600 mb-2">
+                <p className="text-gray-400 mb-2">
                   Drag and drop your PDF here or
                 </p>
                 <label className="inline-block bg-blue-500 text-white px-4 py-2 rounded cursor-pointer hover:bg-blue-600">
@@ -177,11 +179,11 @@ const PDFColorTransform = () => {
                 </label>
               </>
             ) : (
-              <div className="text-green-600">
+              <div className="text-green-400">
                 <p className="font-medium">{file.name}</p>
                 <button
                   onClick={() => setFile(null)}
-                  className="text-sm text-red-500 mt-2 hover:text-red-600"
+                  className="text-sm text-red-400 mt-2 hover:text-red-500"
                 >
                   Remove
                 </button>
@@ -193,7 +195,7 @@ const PDFColorTransform = () => {
           {file && !isProcessing && (
             <div className="mt-6 space-y-4">
               <div className="flex items-center justify-between">
-                <label className="text-gray-700">Content Color:</label>
+                <label className="text-gray-400">Content Color:</label>
                 <input
                   type="color"
                   value={contentColor}
@@ -202,7 +204,7 @@ const PDFColorTransform = () => {
                 />
               </div>
               <div className="flex items-center justify-between">
-                <label className="text-gray-700">Background Color:</label>
+                <label className="text-gray-400">Background Color:</label>
                 <input
                   type="color"
                   value={backgroundColor}
@@ -210,8 +212,8 @@ const PDFColorTransform = () => {
                   className="w-20 h-10 rounded cursor-pointer"
                 />
               </div>
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">
+              <div className="mt-4 p-4 bg-gray-700 rounded-lg">
+                <h3 className="text-sm font-medium text-gray-400 mb-2">
                   Preview Colors
                 </h3>
                 <div className="flex gap-4">
@@ -239,7 +241,7 @@ const PDFColorTransform = () => {
           {isProcessing && (
             <div className="mt-6 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto"></div>
-              <p className="mt-4 text-gray-600">
+              <p className="mt-4 text-gray-400">
                 Processing PDF... {progress.toFixed(0)}%
               </p>
             </div>
