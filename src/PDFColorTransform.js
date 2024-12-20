@@ -2,103 +2,130 @@ import { Play, Upload } from "lucide-react";
 import { PDFDocument, rgb } from "pdf-lib";
 import React, { useState } from "react";
 
-const PDFColorTransform = () => {
+const PDFColorInverter = () => {
   const [file, setFile] = useState(null);
-  const [contentColor, setContentColor] = useState("#000000");
-  const [backgroundColor, setBackgroundColor] = useState("#ffffff");
   const [isProcessing, setIsProcessing] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
-  // Convert hex color to RGB values
-  const hexToRgb = (hex) => {
-    const r = parseInt(hex.slice(1, 3), 16) / 255;
-    const g = parseInt(hex.slice(3, 5), 16) / 255;
-    const b = parseInt(hex.slice(5, 7), 16) / 255;
-    return { r, g, b };
-  };
-
-  const processFile = async (pdfFile) => {
+  const invertColors = async (pdfFile) => {
     try {
-      // Load the source PDF
       const sourceBytes = await pdfFile.arrayBuffer();
       const pdfDoc = await PDFDocument.load(sourceBytes);
-
       const pages = pdfDoc.getPages();
       const totalPages = pages.length;
-      const contentRgb = hexToRgb(contentColor);
-      const backgroundRgb = hexToRgb(backgroundColor);
 
       // Process each page
       for (let i = 0; i < totalPages; i++) {
         const page = pages[i];
-        const { width, height } = page.getSize();
-
-        // Draw background
-        page.drawRectangle({
-          x: 0,
-          y: 0,
-          width: width,
-          height: height,
-          color: rgb(backgroundRgb.r, backgroundRgb.g, backgroundRgb.b),
-        });
-
-        // Get the page dictionary
         const pageDict = pdfDoc.context.lookup(page.ref);
-
-        // Get the page's content streams
         const contentStream = pageDict.get("Contents");
         if (!contentStream) continue;
 
-        // Get the stream data as string
+        // Get all content streams
+        const streams = Array.isArray(contentStream)
+          ? contentStream
+          : [contentStream];
         let streamData = "";
-        if (Array.isArray(contentStream)) {
-          for (const stream of contentStream) {
-            const data = pdfDoc.context.lookup(stream);
-            streamData += data.toString() + "\n";
-          }
-        } else {
-          streamData = pdfDoc.context.lookup(contentStream).toString();
+
+        for (const stream of streams) {
+          const data = pdfDoc.context.lookup(stream);
+          streamData += data.toString() + "\n";
         }
 
-        // Replace color operators in the content stream
-        const modifiedStream = streamData
-          // Replace RGB color operators
+        // Add commands to set the background to black at the start
+        let modifiedStream =
+          "1 1 1 rg\n" + // Set fill color to white
+          "0 0 " +
+          page.getWidth() +
+          " " +
+          page.getHeight() +
+          " re\n" + // Create rectangle
+          "f\n" + // Fill the rectangle
+          "0 0 0 rg\n"; // Reset fill color to black
+
+        // Replace color operators in the original content
+        modifiedStream += streamData
+          // Handle grayscale
+          .replace(/(\d+\.?\d*|\.\d+)\s+g/g, (match) => {
+            const value = parseFloat(match);
+            return `${(1 - value).toFixed(3)} g`;
+          })
+          .replace(/(\d+\.?\d*|\.\d+)\s+G/g, (match) => {
+            const value = parseFloat(match);
+            return `${(1 - value).toFixed(3)} G`;
+          })
+          // Handle RGB
           .replace(
-            /([0-9.]+\s+){2}[0-9.]+\s+(rg|RG)/g,
-            `${contentRgb.r} ${contentRgb.g} ${contentRgb.b} $2`
+            /(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+rg/g,
+            (match) => {
+              const [r, g, b] = match.split(/\s+/).map(Number);
+              return `${(1 - r).toFixed(3)} ${(1 - g).toFixed(3)} ${(
+                1 - b
+              ).toFixed(3)} rg`;
+            }
           )
-          // Replace CMYK color operators
           .replace(
-            /([0-9.]+\s+){3}[0-9.]+\s+(k|K)/g,
-            `${contentRgb.r} ${contentRgb.g} ${contentRgb.b} 0 $2`
+            /(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+RG/g,
+            (match) => {
+              const [r, g, b] = match.split(/\s+/).map(Number);
+              return `${(1 - r).toFixed(3)} ${(1 - g).toFixed(3)} ${(
+                1 - b
+              ).toFixed(3)} RG`;
+            }
           )
-          // Replace grayscale color operators
+          // Handle CMYK
           .replace(
-            /([0-9.]+)\s+(g|G)/g,
-            `${contentRgb.r} ${contentRgb.g} ${contentRgb.b} $2`
+            /(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+k/g,
+            (match) => {
+              const [c, m, y, k] = match.split(/\s+/).map(Number);
+              return `${(1 - c).toFixed(3)} ${(1 - m).toFixed(3)} ${(
+                1 - y
+              ).toFixed(3)} ${(1 - k).toFixed(3)} k`;
+            }
+          )
+          .replace(
+            /(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+(\d+\.?\d*|\.\d+)\s+K/g,
+            (match) => {
+              const [c, m, y, k] = match.split(/\s+/).map(Number);
+              return `${(1 - c).toFixed(3)} ${(1 - m).toFixed(3)} ${(
+                1 - y
+              ).toFixed(3)} ${(1 - k).toFixed(3)} K`;
+            }
           );
 
-        // Create a new stream with modified content
+        // Create new stream with modified content
         const newStream = pdfDoc.context.stream(modifiedStream);
         pageDict.set("Contents", newStream);
 
         setProgress(((i + 1) / totalPages) * 100);
       }
 
+      // Generate preview of first page
+      if (totalPages > 0) {
+        const previewDoc = await PDFDocument.create();
+        const [firstPage] = await previewDoc.copyPages(pdfDoc, [0]);
+        previewDoc.addPage(firstPage);
+        const previewBytes = await previewDoc.save();
+        const previewBlob = new Blob([previewBytes], {
+          type: "application/pdf",
+        });
+        const previewUrl = URL.createObjectURL(previewBlob);
+        setPreviewUrl(previewUrl);
+      }
+
       // Save the modified PDF
       const modifiedPdfBytes = await pdfDoc.save();
-
-      // Create and download the new PDF
       const blob = new Blob([modifiedPdfBytes], { type: "application/pdf" });
-      const url = window.URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `transformed-${pdfFile.name}`;
+      link.download = `inverted-${pdfFile.name}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      URL.revokeObjectURL(url);
 
       setIsProcessing(false);
       setProgress(0);
@@ -109,6 +136,7 @@ const PDFColorTransform = () => {
       alert("Error processing PDF. Please try again.");
     }
   };
+
   const handleDrag = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -127,19 +155,21 @@ const PDFColorTransform = () => {
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile && droppedFile.type === "application/pdf") {
       setFile(droppedFile);
+      setPreviewUrl(null);
     }
   };
 
   const handleFileSelect = (e) => {
     if (e.target.files[0]) {
       setFile(e.target.files[0]);
+      setPreviewUrl(null);
     }
   };
 
   const handleProcess = () => {
     if (!file) return;
     setIsProcessing(true);
-    processFile(file);
+    invertColors(file);
   };
 
   return (
@@ -147,7 +177,7 @@ const PDFColorTransform = () => {
       <div className="max-w-2xl mx-auto">
         <div className="bg-gray-800 rounded-lg shadow-md p-6">
           <h1 className="text-2xl font-semibold text-center mb-6">
-            PDF Color Transform
+            PDF Color Inverter
           </h1>
 
           {/* File Upload Area */}
@@ -182,7 +212,10 @@ const PDFColorTransform = () => {
               <div className="text-green-400">
                 <p className="font-medium">{file.name}</p>
                 <button
-                  onClick={() => setFile(null)}
+                  onClick={() => {
+                    setFile(null);
+                    setPreviewUrl(null);
+                  }}
                   className="text-sm text-red-400 mt-2 hover:text-red-500"
                 >
                   Remove
@@ -191,50 +224,31 @@ const PDFColorTransform = () => {
             )}
           </div>
 
-          {/* Color Settings */}
-          {file && !isProcessing && (
-            <div className="mt-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <label className="text-gray-400">Content Color:</label>
-                <input
-                  type="color"
-                  value={contentColor}
-                  onChange={(e) => setContentColor(e.target.value)}
-                  className="w-20 h-10 rounded cursor-pointer"
+          {/* Preview Area */}
+          {previewUrl && (
+            <div className="mt-6">
+              <h3 className="text-sm font-medium text-gray-400 mb-2">
+                Preview (First Page)
+              </h3>
+              <div className="w-full h-96 bg-gray-700 rounded-lg overflow-hidden">
+                <iframe
+                  src={previewUrl}
+                  className="w-full h-full"
+                  title="PDF Preview"
                 />
               </div>
-              <div className="flex items-center justify-between">
-                <label className="text-gray-400">Background Color:</label>
-                <input
-                  type="color"
-                  value={backgroundColor}
-                  onChange={(e) => setBackgroundColor(e.target.value)}
-                  className="w-20 h-10 rounded cursor-pointer"
-                />
-              </div>
-              <div className="mt-4 p-4 bg-gray-700 rounded-lg">
-                <h3 className="text-sm font-medium text-gray-400 mb-2">
-                  Preview Colors
-                </h3>
-                <div className="flex gap-4">
-                  <div
-                    className="w-16 h-16 rounded shadow-sm"
-                    style={{ backgroundColor: contentColor }}
-                  />
-                  <div
-                    className="w-16 h-16 rounded shadow-sm"
-                    style={{ backgroundColor: backgroundColor }}
-                  />
-                </div>
-              </div>
-              <button
-                onClick={() => handleProcess()}
-                className="w-full mt-4 bg-green-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 hover:bg-green-600"
-              >
-                <Play className="w-4 h-4" />
-                Start Processing
-              </button>
             </div>
+          )}
+
+          {/* Process Button */}
+          {file && !isProcessing && (
+            <button
+              onClick={handleProcess}
+              className="w-full mt-6 bg-green-500 text-white px-4 py-2 rounded flex items-center justify-center gap-2 hover:bg-green-600"
+            >
+              <Play className="w-4 h-4" />
+              Invert Colors
+            </button>
           )}
 
           {/* Processing Animation */}
@@ -242,7 +256,7 @@ const PDFColorTransform = () => {
             <div className="mt-6 text-center">
               <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto"></div>
               <p className="mt-4 text-gray-400">
-                Processing PDF... {progress.toFixed(0)}%
+                Inverting colors... {progress.toFixed(0)}%
               </p>
             </div>
           )}
@@ -252,4 +266,4 @@ const PDFColorTransform = () => {
   );
 };
 
-export default PDFColorTransform;
+export default PDFColorInverter;
